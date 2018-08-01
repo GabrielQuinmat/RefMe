@@ -1,12 +1,9 @@
 package main.controllers;
 
-import com.sun.xml.internal.ws.api.message.ExceptionHasMessage;
 import javafx.animation.KeyFrame;
 import javafx.animation.KeyValue;
 import javafx.animation.Timeline;
-import javafx.beans.property.Property;
-import javafx.beans.property.ReadOnlyDoubleWrapper;
-import javafx.beans.property.SimpleDoubleProperty;
+import javafx.application.Platform;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.fxml.FXML;
@@ -17,7 +14,6 @@ import javafx.scene.Node;
 import javafx.scene.control.*;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
-import javafx.scene.layout.AnchorPane;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.VBox;
 import javafx.scene.text.Font;
@@ -34,7 +30,10 @@ import java.io.IOException;
 import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.text.SimpleDateFormat;
+import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.Random;
 import java.util.ResourceBundle;
 
@@ -92,6 +91,7 @@ public class Controller implements Initializable {
 
     Timeline timeline = new Timeline();
     private Timer timer;
+    private Instant startClock;
 
     private int nPrev = -1;
     private int nActual = 0;
@@ -113,8 +113,8 @@ public class Controller implements Initializable {
         setButton.setOnAction(e -> popupEditNode());
         setButton.setId("setButton");
         startButton.setOnAction(e -> {
-            if (startTimer()){
-                nActual = new Random().nextInt(images.size()) + 1;
+            if (startTimer()) {
+                nActual = new Random().nextInt(images.size());
                 setImage(images.get(
                         nActual).getUrl());
             }
@@ -132,7 +132,7 @@ public class Controller implements Initializable {
         nxtButton.setOnAction(e -> {
             timer.stop();
             nPrev = nActual;
-            nActual = new Random().nextInt(images.size()) + 1;
+            nActual = new Random().nextInt(images.size());
             setImage(images.get(
                     nActual).getUrl());
             timer.start();
@@ -144,7 +144,7 @@ public class Controller implements Initializable {
     }
 
     private void setBackImage() {
-        if(nPrev == -1)
+        if (nPrev == -1)
             return;
         nActual = nPrev;
         setImage(images.get(nPrev).getUrl());
@@ -166,12 +166,39 @@ public class Controller implements Initializable {
     private boolean startTimer() {
         timer = null;
         try {
-            timer = new Timer(parseTime(), e -> randomImage());
+            timer = new Timer(parseTime(), e -> {
+                randomImage();
+                startClock = Instant.now();
+            }
+            );
             timer.start();
+            startClock = Instant.now();
+            timerOnScreen();
             return true;
         } catch (Exception e) {
             return false;
         }
+    }
+
+    private void timerOnScreen() {
+        Text timerText = new Text();
+        timerText.setStyle("-fx-text-fill: red;" + "-fx-font-size: 20px");
+        Thread thread = new Thread(() -> {
+            while (timer.isRunning()) {
+                try {
+                    Thread.sleep(1000);
+                } catch (InterruptedException e) {
+                }
+                java.time.Duration d = java.time.Duration.between(startClock, Instant.now());
+                final String timeS = d.toMinutes() + " minutes " + d.getSeconds() + " seconds";
+                Platform.runLater(() -> {
+                    timerText.setText(timeS);
+                    tFlow.getChildren().clear();
+                    tFlow.getChildren().add(timerText);
+                });
+            }
+        });
+        thread.start();
     }
 
     private int parseTime() throws Exception {
@@ -204,7 +231,7 @@ public class Controller implements Initializable {
 
     private void randomImage() {
         nPrev = nActual;
-        nActual = new Random().nextInt(images.size()) + 1;
+        nActual = new Random().nextInt(images.size());
         setImage(images.get(nActual).getUrl());
     }
 
