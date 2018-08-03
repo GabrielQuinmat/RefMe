@@ -13,13 +13,13 @@ public class Main extends Application {
 
     @Override
     public void start(Stage primaryStage) throws Exception{
-        Parent root = FXMLLoader.load(getClass().getResource("../resources/fxmls/mainScene.fxml"));
+        Parent root = FXMLLoader.load(getClass().getResource("/resources/fxmls/mainScene.fxml"));
         primaryStage.setTitle("RefMe");
         Scene scene = new Scene(root);
-        scene.getStylesheets().add(getClass().getResource("../resources/styles/mainScene.css")
+        scene.getStylesheets().add(getClass().getResource("/resources/styles/mainScene.css")
         .toExternalForm());
         publicWindow = primaryStage;
-        publicWindow.getIcons().add(new Image(getClass().getResourceAsStream("../resources/images/RefMe.PNG")));
+        publicWindow.getIcons().add(new Image(getClass().getResourceAsStream("/resources/images/RefMe.PNG")));
         publicWindow.setScene(scene);
         publicWindow.show();
     }

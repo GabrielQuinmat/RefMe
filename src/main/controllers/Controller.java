@@ -134,6 +134,7 @@ public class Controller implements Initializable {
             timer.stop();
             setBackImage();
             timer.start();
+            startClock = Instant.now();
         });
 
         nxtButton.setOnAction(e -> {
@@ -143,6 +144,7 @@ public class Controller implements Initializable {
             setImage(imageArray.get(
                     nActual).getUrl());
             timer.start();
+            startClock = Instant.now();
         });
 
         image.fitWidthProperty().bind(pane.widthProperty());
