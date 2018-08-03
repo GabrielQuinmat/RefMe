@@ -16,13 +16,12 @@ import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.VBox;
-import javafx.scene.text.Font;
 import javafx.scene.text.Text;
 import javafx.scene.text.TextFlow;
 import javafx.stage.DirectoryChooser;
 import javafx.stage.Stage;
 import javafx.util.Duration;
-import main.ImageSet;
+import main.model.ImageSet;
 
 import javax.swing.*;
 import java.io.File;
@@ -30,10 +29,8 @@ import java.io.IOException;
 import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.text.SimpleDateFormat;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.Date;
 import java.util.Random;
 import java.util.ResourceBundle;
 
@@ -49,7 +46,25 @@ public class Controller implements Initializable {
     final static int THIRTY_MINUTES = FIFTEEN_MINUTES * 2;
 
     Path path;
-    ArrayList<ImageSet> images;
+    ArrayList<ImageSet> imageArray;
+
+    Button startButton = new Button("Start");
+    Button stopButton = new Button("Stop!");
+
+    ScrollPane scrollPane;
+
+    Label timeLabel = new Label("Time per Image");
+    ComboBox timeComboBox = new ComboBox();
+
+    ObservableList<String> timeCBOptions = FXCollections.observableArrayList("30 Seconds", "1 minute", "2 minutes",
+            "3 minutes", "5 minutes", "10 minutes", "15 minutes", "30 minutes");
+
+    Timeline timeline = new Timeline();
+    private Timer timer;
+    private Instant startClock;
+
+    private int nPrev = -1;
+    private int nActual = 0;
 
     @FXML
     ImageView image;
@@ -64,7 +79,7 @@ public class Controller implements Initializable {
     ButtonBar buttonBar;
 
     @FXML
-    TextFlow tFlow;
+    TextFlow textFlow;
 
     @FXML
     BorderPane pane;
@@ -78,89 +93,115 @@ public class Controller implements Initializable {
     @FXML
     VBox vbox;
 
-    Button startButton = new Button("Start");
-    Button stopButton = new Button("Stop!");
+    @FXML
+    Text messageText;
 
-    ScrollPane scrollPane;
 
-    Label timeLabel = new Label("Time per Image");
-    ComboBox timeBox = new ComboBox();
-
-    ObservableList<String> timeList = FXCollections.observableArrayList("30 Seconds", "1 minute", "2 minutes",
-            "3 minutes", "5 minutes", "10 minutes", "15 minutes", "30 minutes");
-
-    Timeline timeline = new Timeline();
-    private Timer timer;
-    private Instant startClock;
-
-    private int nPrev = -1;
-    private int nActual = 0;
 
     @Override
     public void initialize(URL location, ResourceBundle resources) {
         scrollPane = generateInnerPane();
+
         buttonBar.setButtonData(wdButton, ButtonBar.ButtonData.LEFT);
         buttonBar.setButtonData(setButton, ButtonBar.ButtonData.LEFT);
+
         wdButton.setOnAction(event -> {
             if (openDirectory()) {
-                images = retrieveSet();
-                Text text = new Text("Directory Established, " + images.size() + " images loaded.");
-                text.fontProperty().setValue(Font.font(15));
-                tFlow.getChildren().add(text);
+                imageArray = retrieveSet();
+                messageText.setText("Directory Established, " + imageArray.size() + " images loaded.");
             }
         });
         wdButton.setId("wdButton");
-        setButton.setOnAction(e -> popupEditNode());
+
+        setButton.setOnAction(e -> popupSettingsPane());
         setButton.setId("setButton");
+
         startButton.setOnAction(e -> {
             if (startTimer()) {
-                nActual = new Random().nextInt(images.size());
-                setImage(images.get(
+                nActual = new Random().nextInt(imageArray.size());
+                setImage(imageArray.get(
                         nActual).getUrl());
             }
         });
         startButton.setPrefWidth(120);
         startButton.setId("startButton");
+
         stopButton.setPrefWidth(120);
         stopButton.setId("stopButton");
         stopButton.setOnAction(event -> stopTimer());
+
         prvButton.setOnAction(e -> {
             timer.stop();
             setBackImage();
             timer.start();
         });
+
         nxtButton.setOnAction(e -> {
             timer.stop();
             nPrev = nActual;
-            nActual = new Random().nextInt(images.size());
-            setImage(images.get(
+            nActual = new Random().nextInt(imageArray.size());
+            setImage(imageArray.get(
                     nActual).getUrl());
             timer.start();
         });
 
         image.fitWidthProperty().bind(pane.widthProperty());
         image.fitHeightProperty().bind(pane.heightProperty().subtract(vbox.heightProperty())
-                .subtract(tFlow.heightProperty()));
+                .subtract(textFlow.heightProperty()));
     }
 
-    private void setBackImage() {
-        if (nPrev == -1)
-            return;
-        nActual = nPrev;
-        setImage(images.get(nPrev).getUrl());
+    private ScrollPane generateInnerPane() {
+        VBox vbox = new VBox(50);
+        VBox innerVBox = new VBox(10);
+        innerVBox.setPadding(new Insets(5));
+        timeComboBox.getItems().addAll(timeCBOptions);
+        innerVBox.getChildren().addAll(timeLabel, timeComboBox, startButton, stopButton);
+        innerVBox.alignmentProperty().setValue(Pos.TOP_CENTER);
+        vbox.getChildren().add(innerVBox);
+        ScrollPane scrollPane = new ScrollPane(vbox);
+        scrollPane.setPrefWidth(150);
+        scrollPane.setMaxWidth(400);
+        return scrollPane;
     }
 
-    private void fitImageToScreen() {
-        image.setFitHeight(pane.heightProperty().subtract(vbox.heightProperty())
-                .subtract(tFlow.getHeight()).doubleValue());
-        image.setFitWidth(pane.widthProperty().doubleValue());
-    }
-
-    private void stopTimer() {
+    private boolean openDirectory() {
+        DirectoryChooser directoryChooser = new DirectoryChooser();
+        directoryChooser.setTitle("Select a Directory");
+        directoryChooser.setInitialDirectory(new File(System.getProperty("user.home")));
         try {
-            timer.stop();
+            path = directoryChooser.showDialog(new Stage()).toPath();
+            return true;
         } catch (Exception e) {
+            messageText.setText("No Valid Directory Selected");
+            return false;
         }
+    }
+
+    private ArrayList<ImageSet> retrieveSet() {
+        ArrayList<ImageSet> imageSetArrayList = new ArrayList<>();
+        try {
+            Files.list(path).filter(p -> p.getFileName().toString().endsWith(".jpg") ||
+                    p.getFileName().toString().endsWith(".jpeg") ||
+                    p.getFileName().toString().endsWith(".png"))
+                    .forEach(p -> imageSetArrayList.add(
+                            new ImageSet(p.toAbsolutePath().toString(), p.getFileName().toString())));
+        } catch (IOException e) {
+            messageText.setText("Error while retrieving images!");
+        }
+        return imageSetArrayList;
+    }
+
+    private void popupSettingsPane() {
+        if (pane.getLeft() != null) {
+            fadeOutNode(pane.getLeft());
+            timeline.setOnFinished(e -> pane.setLeft(null));
+        } else {
+            timeline.setOnFinished(null);
+            pane.setLeft(scrollPane);
+            fadeInNode(pane.getLeft());
+            pane.getLeft().setVisible(true);
+        }
+
     }
 
     private boolean startTimer() {
@@ -180,9 +221,32 @@ public class Controller implements Initializable {
         }
     }
 
+    private void setImage(String url) {
+        Image imageElement = null;
+        try {
+            imageElement = new Image("file:" + url);
+            image.setImage(imageElement);
+        } catch (Exception e) {
+            messageText.setText("Error: File not found!");
+        }
+    }
+
+    private void stopTimer() {
+        try {
+            timer.stop();
+        } catch (Exception e) {
+        }
+    }
+
+    private void setBackImage() {
+        if (nPrev == -1)
+            return;
+        nActual = nPrev;
+        setImage(imageArray.get(nPrev).getUrl());
+    }
+
+
     private void timerOnScreen() {
-        Text timerText = new Text();
-        timerText.setStyle("-fx-text-fill: red;" + "-fx-font-size: 20px");
         Thread thread = new Thread(() -> {
             while (timer.isRunning()) {
                 try {
@@ -192,9 +256,7 @@ public class Controller implements Initializable {
                 java.time.Duration d = java.time.Duration.between(startClock, Instant.now());
                 final String timeS = d.toMinutes() + " minutes " + d.getSeconds() + " seconds";
                 Platform.runLater(() -> {
-                    timerText.setText(timeS);
-                    tFlow.getChildren().clear();
-                    tFlow.getChildren().add(timerText);
+                    messageText.setText(timeS);
                 });
             }
         });
@@ -202,7 +264,7 @@ public class Controller implements Initializable {
     }
 
     private int parseTime() throws Exception {
-        switch (timeBox.getSelectionModel().getSelectedIndex()) {
+        switch (timeComboBox.getSelectionModel().getSelectedIndex()) {
             case 0:
                 return THIRTY_SECONDS;
             case 1:
@@ -220,79 +282,15 @@ public class Controller implements Initializable {
             case 7:
                 return THIRTY_MINUTES;
             default:
-                Text textError = new Text("Error, no time selected!");
-                textError.fontProperty().setValue(Font.font(15));
-                textError.setStyle("-fx-text-fill: #d66060;");
-                tFlow.getChildren().clear();
-                tFlow.getChildren().add(textError);
+                messageText.setText("Error: No time option selected!");
                 throw new Exception();
         }
     }
 
     private void randomImage() {
         nPrev = nActual;
-        nActual = new Random().nextInt(images.size());
-        setImage(images.get(nActual).getUrl());
-    }
-
-    private ArrayList<ImageSet> retrieveSet() {
-        ArrayList<ImageSet> imageSetArrayList = new ArrayList<>();
-        try {
-            Files.list(path).filter(p -> p.getFileName().toString().endsWith(".jpg") ||
-                    p.getFileName().toString().endsWith(".jpeg") ||
-                    p.getFileName().toString().endsWith(".png"))
-                    .forEach(p -> imageSetArrayList.add(
-                            new ImageSet(p.toAbsolutePath().toString(), p.getFileName().toString())));
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-        return imageSetArrayList;
-    }
-
-    private boolean openDirectory() {
-        DirectoryChooser directoryChooser = new DirectoryChooser();
-        directoryChooser.setTitle("Select a Working Directory");
-        directoryChooser.setInitialDirectory(new File(System.getProperty("user.home")));
-        try {
-            path = directoryChooser.showDialog(new Stage()).toPath();
-            return true;
-        } catch (Exception e) {
-            tFlow.getChildren().clear();
-            tFlow.getChildren().add(new Text("No Directory Selected"));
-            return false;
-        }
-    }
-
-    private void setImage(String url) {
-        Image imageElement = new Image("file:" + url);
-        image.setImage(imageElement);
-    }
-
-    private void popupEditNode() {
-        if (pane.getLeft() != null) {
-            fadeOutNode(pane.getLeft());
-            timeline.setOnFinished(e -> pane.setLeft(null));
-        } else {
-            timeline.setOnFinished(null);
-            pane.setLeft(scrollPane);
-            fadeInNode(pane.getLeft());
-            pane.getLeft().setVisible(true);
-        }
-
-    }
-
-    private ScrollPane generateInnerPane() {
-        VBox vbox = new VBox(50);
-        VBox innerVBox = new VBox(10);
-        innerVBox.setPadding(new Insets(5));
-        timeBox.getItems().addAll(timeList);
-        innerVBox.getChildren().addAll(timeLabel, timeBox, startButton, stopButton);
-        innerVBox.alignmentProperty().setValue(Pos.TOP_CENTER);
-        vbox.getChildren().add(innerVBox);
-        ScrollPane scrollPane = new ScrollPane(vbox);
-        scrollPane.setPrefWidth(150);
-        scrollPane.setMaxWidth(400);
-        return scrollPane;
+        nActual = new Random().nextInt(imageArray.size());
+        setImage(imageArray.get(nActual).getUrl());
     }
 
     private void fadeInNode(Node node) {
