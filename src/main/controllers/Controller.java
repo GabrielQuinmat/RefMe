@@ -95,7 +95,7 @@ public class Controller implements Initializable {
 
     @FXML
     Text messageText;
-
+    private Thread threadTimer;
 
 
     @Override
@@ -150,6 +150,8 @@ public class Controller implements Initializable {
         image.fitWidthProperty().bind(pane.widthProperty());
         image.fitHeightProperty().bind(pane.heightProperty().subtract(vbox.heightProperty())
                 .subtract(textFlow.heightProperty()));
+
+        setTimer();
     }
 
     private ScrollPane generateInnerPane() {
@@ -236,6 +238,7 @@ public class Controller implements Initializable {
     private void stopTimer() {
         try {
             timer.stop();
+            threadTimer.interrupt();
         } catch (Exception e) {
         }
     }
@@ -249,20 +252,34 @@ public class Controller implements Initializable {
 
 
     private void timerOnScreen() {
-        Thread thread = new Thread(() -> {
+        System.out.println("Thread isAlive: " + threadTimer.isAlive());
+        if(threadTimer.isAlive())
+            threadTimer.start();
+        else {
+            threadTimer.start();
+        }
+    }
+
+    private void setTimer(){
+        threadTimer = new Thread(() -> {
             while (timer.isRunning()) {
                 try {
                     Thread.sleep(1000);
                 } catch (InterruptedException e) {
                 }
-                java.time.Duration d = java.time.Duration.between(startClock, Instant.now());
-                final String timeS = d.toMinutes() + " minutes " + d.getSeconds() + " seconds";
-                Platform.runLater(() -> {
-                    messageText.setText(timeS);
-                });
+                try {
+                    java.time.Duration endClock = java.time.Duration.ofMillis(parseTime() + 1000);
+                    java.time.Duration actualCounter = java.time.Duration.between(startClock, Instant.now());
+                    java.time.Duration remainingTime = endClock.minus(actualCounter);
+                    final String timeS = remainingTime.toMinutes() + " minutes " +
+                            remainingTime.getSeconds() + " seconds";
+                    Platform.runLater(() -> {
+                        messageText.setText(timeS);
+                    });
+                } catch (Exception e) {}
+
             }
         });
-        thread.start();
     }
 
     private int parseTime() throws Exception {
